@@ -1,0 +1,13 @@
+services:
+  ten-parser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ten-parser:latest
+    container_name: ten-parser
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xmx512m
+    # Аргументы CLI передаются при запуске:
+    # docker compose run --rm ten-parser --keyword kaspersky --status "В процессе проведения" --pages 2
+    command: ["--keyword", "kaspersky", "--status", "В процессе проведения", "--pages", "2"]

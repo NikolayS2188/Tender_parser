@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Gradle
+.gradle
+build
+gradle-app.setting
+.gradletasknamecache
+
+# IDE
+.idea
+*.iml
+.vscode
+.settings
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log
+logs
+
+# Секреты и локальные конфиги
+.env
+.env.*
+application-local.yml
+application-local.properties
+*-secrets.properties
+
+# Документация
+README.md
+docs
+
+# CI/CD
+.github

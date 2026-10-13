@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: ten-parser
+  main:
+    web-application-type: none   # не поднимаем веб-сервер
+
+sberbank:
+  base-url: "https://www.sberbank-ast.ru"
+  api-path: "/api/Processing/main"
+  referer: "https://www.sberbank-ast.ru/UnitedPurchaseList.html"
+  page-url: "https://www.sberbank-ast.ru/UnitedPurchaseList.html"
+  window-code: "/EsOpenUnitedPurchaseList"
+  user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+  page-size: 20
+  start-public-date: "01.01.2024"
+  end-public-date: "09.10.2026 23:59:59"
+  connect-timeout-seconds: 30
+  read-timeout-seconds: 60
+  delay-min-millis: 1500
+  delay-max-millis: 3000
