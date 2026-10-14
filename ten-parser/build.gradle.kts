@@ -35,9 +35,8 @@ dependencies {
     implementation("org.slf4j:slf4j-api")
     implementation("ch.qos.logback:logback-classic")
 
-    // Selenium for RTC-Tender ()
+    // Selenium for RTC-Tender (version compatible with Chrome 155)
     implementation("org.seleniumhq.selenium:selenium-java:4.35.0")
-    implementation("io.github.bonigarcia:webdrivermanager:5.9.2")
 
     // Tests
     testImplementation("org.springframework.boot:spring-boot-starter-test")
@@ -55,6 +54,11 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
     options.release.set(21)
     options.compilerArgs.add("-parameters")
+}
+
+// For krakoziabri in terminal
+tasks.withType<JavaExec> {
+    jvmArgs("-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
 }
 
 springBoot {

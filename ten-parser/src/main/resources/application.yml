@@ -23,7 +23,6 @@ sberbank:
 rts:
   base-url: "https://www.rts-tender.ru"
   search-path: "/poisk/search"
-  ajax-path: "/poisk/search/ajaxwithfullmodel"
   user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
   delay-min-millis: 2000
   delay-max-millis: 4000

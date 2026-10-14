@@ -60,10 +60,10 @@ class TenderServiceTest {
 
         service.searchAndPrint("rts",
                 List.of("kaspersky"),
-                List.of("В процессе проведения"),
+                List.of("Активные"),  // ← реальный статус RTS
                 1);
 
-        verify(rtsClient, times(1)).search("kaspersky", "В процессе проведения", 0);
+        verify(rtsClient, times(1)).search("kaspersky", "Активные", 0);
         verify(sberbankClient, never()).search(anyString(), anyString(), anyInt());
     }
 

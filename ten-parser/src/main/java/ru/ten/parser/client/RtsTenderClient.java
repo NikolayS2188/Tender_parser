@@ -1,10 +1,15 @@
 package ru.ten.parser.client;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -13,42 +18,23 @@ import ru.ten.parser.model.Purchase;
 import ru.ten.parser.model.SearchResponse;
 import ru.ten.parser.util.RequestDelay;
 
-import java.net.CookieManager;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
-
-/**
- * Использует RtsSessionProvider для получения сессии, HttpClient для POST и Jsoup для парсинга HTML
- */
 @Component
 public class RtsTenderClient implements TenderClient {
 
     private static final Logger log = LoggerFactory.getLogger(RtsTenderClient.class);
 
-    private final RtsSessionProvider sessionProvider;
+    private final WebDriver driver;
     private final RtsProperties props;
     private final RequestDelay delay;
-    private final ObjectMapper objectMapper;
 
-    private RtsSession session;
-    private HttpClient httpClient;
-
-    public RtsTenderClient(RtsSessionProvider sessionProvider,
-                           RtsProperties props,
-                           RequestDelay delay,
-                           ObjectMapper objectMapper) {
-        this.sessionProvider = sessionProvider;
+    public RtsTenderClient(WebDriver driver, RtsProperties props, RequestDelay delay) {
+        this.driver = driver;
         this.props = props;
         this.delay = delay;
-        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -67,109 +53,156 @@ public class RtsTenderClient implements TenderClient {
     }
 
     private SearchResponse doSearch(List<String> keywords, String status, int pageNum) throws Exception {
-        ensureSession();
-
-        // Задержка между POST-запросами (кроме первого)
-        if (pageNum > 0) {
-            delay.sleep(props.delayMinMillis(), props.delayMaxMillis());
-        }
-
         String query = String.join(" ", keywords);
-        log.info("РТС-Тендер поиск: query='{}', pageNum={}", query, pageNum);
+        log.info("РТС-Тендер поиск: query='{}', status='{}', pageNum={}", query, status, pageNum);
 
-        // 1. Формируем JSON-тело запроса (как в HAR)
-        Map<String, Object> filter = new LinkedHashMap<>();
-        filter.put("contractStatuses", List.of());
-        filter.put("notificationStatuses", mapStatusToNotificationStatuses(status));
-        filter.put("isSearch223", true);
-        filter.put("isSearch44", true);
-        filter.put("isSearch615", true);
-        filter.put("isSearchCOM", true);
-        filter.put("isSearchZMO", true);
-        filter.put("isSearchSP", false);
-        filter.put("isSearchRFP", true);
-        filter.put("customerIds", List.of());
-        filter.put("deliveryRegionIds", List.of());
-        filter.put("etpCodes", List.of());
-        filter.put("pwsIds", List.of(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25));
-        filter.put("regionIds", List.of());
-        filter.put("isSmp", null);
-        filter.put("nmcFrom", 0);
-        filter.put("nmcTo", null);
+        String url = props.baseUrl() + props.searchPath();
+        driver.get(url);
 
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("filter", filter);
-        body.put("isAscendingSorting", false);
-        body.put("searchQuery", query);
-        body.put("skip", pageNum * 10);
-        body.put("sort", "PublishDate");
-        body.put("top", 10);
-        body.put("type", 1);
-        body.put("RegionAlias", "");
-        body.put("CityName", "");
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(30));
 
-        String jsonBody = objectMapper.writeValueAsString(body);
-        log.debug("POST {} body: {}", props.ajaxPath(), jsonBody);
+        // 1. Ждём поле поиска
+        WebElement searchBox = wait.until(
+                ExpectedConditions.presenceOfElementLocated(By.cssSelector("input.search__text"))
+        );
 
-        // 2. Отправляем POST-запрос
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(props.baseUrl() + props.ajaxPath()))
-                .timeout(Duration.ofSeconds(30))
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json, text/plain, */*")
-                .header("User-Agent", props.userAgent())
-                .header("Origin", props.baseUrl())
-                .header("Referer", props.baseUrl() + props.searchPath())
-                .header("X-Requested-With", "XMLHttpRequest")
-                .header("X-XSRF-TOKEN", session.xsrfToken());
+        // 2. Вводим запрос
+        searchBox.clear();
+        searchBox.sendKeys(query);
 
-        if (session.fotoken() != null) {
-            builder.header("fotoken", session.fotoken());
+        // 3. Применяем фильтр статуса (если нужен) и делаем первый поиск
+        boolean needStatusFilter = status != null
+                && !status.isBlank()
+                && !status.equalsIgnoreCase("Активные")
+                && !status.equalsIgnoreCase("В процессе проведения");
+
+        if (needStatusFilter) {
+            applyStatusFilterAndSearch(status, wait);
+        } else {
+            clickMainSearchButton(wait);
         }
 
-        HttpRequest request = builder
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
+        // 4. Ждём карточки
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(".card-item")));
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        // 5. Пауза после загрузки
+        delay.sleep(props.delayMinMillis(), props.delayMaxMillis());
 
-        log.debug("Response status: {}, body size: {}", response.statusCode(), response.body().length());
-
-        if (response.statusCode() != 200) {
-            throw new IllegalStateException(
-                    "РТС-Тендер вернул HTTP " + response.statusCode() + ": " + response.body()
-            );
+        // 6. Если нужна страница > 0 — переходим вперёд через клик по ">"
+        for (int i = 0; i < pageNum; i++) {
+            delay.sleep(props.delayMinMillis(), props.delayMaxMillis());
+            goToNextPage(wait);
         }
 
-        // 3. Парсим HTML-ответ через Jsoup
-        return parseHtmlResponse(response.body(), query);
+        // 7. HTML
+        String html = driver.getPageSource();
+
+        // 8. Парсим
+        return parseHtmlResponse(html, query);
     }
 
     /**
-     * Маппинг текстового статуса на числовой код РТС-Тендер.
-     * Коды:
-     * 1 — Активные
-     * 2 — Определение победителя
-     * 3 — Идут торги
-     * 4 — Подписание контракта
-     * 5 — Архив
+     * Клик по основной кнопке "Найти" (mainButtonSearch).
+     * Используется, когда фильтр статуса не нужен — работает "Активные" по умолчанию.
      */
-    private List<Integer> mapStatusToNotificationStatuses(String status) {
-        if (status == null || status.isBlank()) {
-            return List.of(1); // по умолчанию — «Активные»
-        }
-
-        return switch (status.toLowerCase().trim()) {
-            case "в процессе проведения", "активные" -> List.of(1);
-            case "определение победителя" -> List.of(2);
-            case "идут торги" -> List.of(3);
-            case "подписание контракта" -> List.of(4);
-            case "архив" -> List.of(5);
-            default -> {
-                log.warn("Неизвестный статус '{}', используем «Активные»", status);
-                yield List.of(1);
+    private void clickMainSearchButton(WebDriverWait wait) {
+        try {
+            // Дожидаемся исчезновения лоадера
+            try {
+                wait.until(ExpectedConditions.invisibilityOfElementLocated(
+                        By.cssSelector("div.loader")
+                ));
+            } catch (Exception e) {
+                log.debug("Лоадер не найден или не исчез");
             }
-        };
+
+            WebElement searchButton = wait.until(
+                    ExpectedConditions.presenceOfElementLocated(
+                            By.cssSelector("button.search__btn.mainButtonSearch")
+                    )
+            );
+            ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", searchButton);
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", searchButton);
+            log.info("Основной поиск запущен (статус по умолчанию — Активные)");
+
+        } catch (Exception e) {
+            log.error("Не удалось кликнуть по основной кнопке 'Найти'", e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Открывает модалку фильтров, снимает "Активные", отмечает нужный статус
+     * и кликает "Найти" внутри модалки (bottomFilterSearch) — это применяет
+     * фильтры и сразу делает поиск.
+     */
+    private void applyStatusFilterAndSearch(String status, WebDriverWait wait) {
+        try {
+            log.info("Применяем фильтр статуса '{}' через модалку", status);
+
+            // 1. Открываем модалку — клик по "Настройка поиска" (кнопка "7")
+            WebElement filterButton = wait.until(
+                    ExpectedConditions.elementToBeClickable(
+                            By.cssSelector("div.main-search__settings")
+                    )
+            );
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", filterButton);
+
+            // 2. Ждём появления модалки
+            wait.until(ExpectedConditions.presenceOfElementLocated(
+                    By.cssSelector("#ftfbn-portal.modal-settings-active")
+            ));
+            log.info("Модалка фильтров открыта");
+
+            // 3. Снимаем "Активные", если отмечен (по умолчанию он активен)
+            try {
+                WebElement activeCheckbox = driver.findElement(
+                        By.xpath("//div[@id='ftfbn-portal']//label[normalize-space(text())='Активные']/preceding-sibling::input[@type='checkbox']")
+                );
+                if (activeCheckbox.isSelected()) {
+                    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", activeCheckbox);
+                    log.info("Чекбокс 'Активные' снят");
+                }
+            } catch (Exception e) {
+                log.debug("Чекбокс 'Активные' не найден — возможно, уже снят");
+            }
+
+            // 4. Отмечаем нужный статус (не "Определение победителя" — его не трогаем)
+            WebElement checkbox = wait.until(
+                    ExpectedConditions.elementToBeClickable(
+                            By.xpath("//div[@id='ftfbn-portal']//label[normalize-space(text())='" + status + "']/preceding-sibling::input[@type='checkbox']")
+                    )
+            );
+            if (!checkbox.isSelected()) {
+                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", checkbox);
+                log.info("Чекбокс '{}' отмечен", status);
+            } else {
+                log.info("Чекбокс '{}' уже отмечен", status);
+            }
+
+            // 5. Кликаем "Найти" внутри модалки — применяет фильтры и делает поиск
+            WebElement applyButton = wait.until(
+                    ExpectedConditions.elementToBeClickable(
+                            By.cssSelector("button.search__btn.bottomFilterSearch")
+                    )
+            );
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", applyButton);
+            log.info("Фильтр статуса '{}' применён, поиск запущен через модалку", status);
+
+            // 6. Ждём закрытия модалки (она закрывается автоматически после "Найти")
+            wait.until(ExpectedConditions.invisibilityOfElementLocated(
+                    By.cssSelector("#ftfbn-portal.modal-settings-active")
+            ));
+
+        } catch (Exception e) {
+            log.warn("Не удалось применить фильтр статуса '{}'", status, e);
+            // Пытаемся закрыть модалку, если она осталась открытой
+            try {
+                WebElement closeBtn = driver.findElement(By.cssSelector(".modal-close"));
+                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", closeBtn);
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private SearchResponse parseHtmlResponse(String html, String query) {
@@ -185,19 +218,31 @@ public class RtsTenderClient implements TenderClient {
 
                 String name = titleEl.text().trim();
 
-                // Фильтр: только те, где есть ключевое слово
                 if (!name.toLowerCase().contains(query.toLowerCase())) {
                     continue;
                 }
 
-                // Номер закупки — из ссылки "Закупка №..."
+                // Номер закупки — ищем через поток
                 String number = "—";
-                Element numberEl = card.selectFirst("a:contains(Закупка №)");
-                if (numberEl != null) {
-                    number = numberEl.text()
-                            .replace("Закупка №", "")
-                            .replace(" в ЕИС", "")
-                            .trim();
+                for (Element a : card.select("a")) {
+                    String text = a.text();
+                    if (text.contains("Закупка №")) {
+                        number = text.replace("Закупка №", "").replace(" в ЕИС", "").trim();
+                        break;
+                    }
+                }
+
+                // Fallback — из data-purchase-info
+                if (number.equals("—")) {
+                    Element detailsBtn = card.selectFirst("a.button-red");
+                    if (detailsBtn != null) {
+                        String info = detailsBtn.attr("data-purchase-info");
+                        if (info != null && info.contains("RegistrationNumber")) {
+                            int start = info.indexOf("RegistrationNumber") + 21;
+                            int end = info.indexOf("\"", start);
+                            number = info.substring(start, end);
+                        }
+                    }
                 }
 
                 if (!name.isEmpty() && !number.equals("—")) {
@@ -214,20 +259,40 @@ public class RtsTenderClient implements TenderClient {
                 purchases.stream().map(SearchResponse.PurchaseItem::new).toList());
     }
 
-    private void ensureSession() {
-        if (session == null) {
-            session = sessionProvider.obtainSession();
+    private void goToNextPage(WebDriverWait wait) {
+        log.info("Переходим на следующую страницу...");
 
-            // Создаём HttpClient с cookies
-            CookieManager cookieManager = new CookieManager();
-            for (var cookie : session.cookies()) {
-                cookieManager.getCookieStore().add(null, cookie);
+        // Запоминаем первый номер закупки до клика
+        String beforeFirstNumber = getFirstPurchaseNumber();
+        log.debug("Первый номер до клика: {}", beforeFirstNumber);
+
+        // Кликаем ">"
+        WebElement nextButton = wait.until(
+                ExpectedConditions.elementToBeClickable(By.cssSelector("a.page-link.next"))
+        );
+        ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", nextButton);
+        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", nextButton);
+
+        // Ждём, пока первый номер изменится
+        wait.until(d -> {
+            String afterFirstNumber = getFirstPurchaseNumber();
+            return afterFirstNumber != null && !afterFirstNumber.equals(beforeFirstNumber);
+        });
+        log.info("Страница обновлена");
+    }
+
+    private String getFirstPurchaseNumber() {
+        try {
+            WebElement firstCard = driver.findElement(By.cssSelector(".card-item"));
+            for (WebElement a : firstCard.findElements(By.tagName("a"))) {
+                String text = a.getText();
+                if (text.contains("Закупка №")) {
+                    return text.replace("Закупка №", "").replace(" в ЕИС", "").trim();
+                }
             }
-
-            this.httpClient = HttpClient.newBuilder()
-                    .cookieHandler(cookieManager)
-                    .connectTimeout(Duration.ofSeconds(30))
-                    .build();
+        } catch (Exception e) {
+            return null;
         }
+        return null;
     }
 }

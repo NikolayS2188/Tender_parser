@@ -5,8 +5,13 @@ services:
       dockerfile: Dockerfile
     image: ten-parser:latest
     container_name: ten-parser
+    # КРИТИЧНО: даёт контейнеру доступ к shared memory хоста
+    # Без этого Chrome падает с "No space left on device"
+    # ipc: host
+    # Альтернатива ipc: host — явный shm_size (рекомендуется в Docker Hub Selenium)
+    shm_size: '2g'
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - JAVA_OPTS=-Xmx512m
-    # Аргументы CLI:
-    # docker compose run --rm ten-parser --platform rts --keyword kaspersky --status "В процессе проведения" --pages 2
+      - JAVA_OPTS=-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError
+    # Аргументы CLI передаются при запуске:
+    # docker compose run --rm ten-parser --platform sberbank --keyword kaspersky --status "В процессе проведения" --pages 2
