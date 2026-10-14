@@ -8,6 +8,7 @@ import ru.ten.parser.config.SearchProperties;
 import ru.ten.parser.model.SearchRequest;
 import ru.ten.parser.model.SearchResponse;
 import ru.ten.parser.util.FilterBodyBuilder;
+import ru.ten.parser.util.RequestDelay;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -18,28 +19,32 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-public class SberbankAstClient {
+public class SberbankAstClient implements TenderClient {
 
     private static final Logger log = LoggerFactory.getLogger(SberbankAstClient.class);
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final SearchProperties props;
+    private final RequestDelay delay;
 
     public SberbankAstClient(HttpClient httpClient,
                              ObjectMapper objectMapper,
-                             SearchProperties props) {
+                             SearchProperties props,
+                             RequestDelay delay) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.props = props;
+        this.delay = delay;
     }
 
-    /**
-     * Поиск по одному ключевому слову.
-     */
+    @Override
     public SearchResponse search(String keyword,
                                  String status,
                                  int pageNum) throws Exception {
+        if (pageNum > 0) {
+            delay.sleep(props.delayMinMillis(), props.delayMaxMillis());
+        }
         String filterBody = FilterBodyBuilder.buildOneWord(
                 keyword, status, pageNum, props.pageSize(),
                 props.startPublicDate(), props.endPublicDate()
@@ -47,17 +52,23 @@ public class SberbankAstClient {
         return doSearch(filterBody);
     }
 
-    /**
-     * Поиск по нескольким ключевым словам (anyWord).
-     */
+    @Override
     public SearchResponse searchMulti(List<String> keywords,
                                       String status,
                                       int pageNum) throws Exception {
+        if (pageNum > 0) {
+            delay.sleep(props.delayMinMillis(), props.delayMaxMillis());
+        }
         String filterBody = FilterBodyBuilder.buildAnyWord(
                 keywords, status, pageNum, props.pageSize(),
                 props.startPublicDate(), props.endPublicDate()
         );
         return doSearch(filterBody);
+    }
+
+    @Override
+    public String getPlatformName() {
+        return "Sberbank-AST";
     }
 
     private SearchResponse doSearch(String filterBody) throws Exception {

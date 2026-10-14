@@ -8,6 +8,5 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - JAVA_OPTS=-Xmx512m
-    # Аргументы CLI передаются при запуске:
-    # docker compose run --rm ten-parser --keyword kaspersky --status "В процессе проведения" --pages 2
-    command: ["--keyword", "kaspersky", "--status", "В процессе проведения", "--pages", "2"]
+    # Аргументы CLI:
+    # docker compose run --rm ten-parser --platform rts --keyword kaspersky --status "В процессе проведения" --pages 2

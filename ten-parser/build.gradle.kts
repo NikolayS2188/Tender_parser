@@ -28,11 +28,18 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.2")
 
-    // Логирование
+    //HTML
+    implementation("org.jsoup:jsoup:1.18.1")
+
+    // Logging
     implementation("org.slf4j:slf4j-api")
     implementation("ch.qos.logback:logback-classic")
 
-    // Тесты
+    // Selenium for RTC-Tender ()
+    implementation("org.seleniumhq.selenium:selenium-java:4.35.0")
+    implementation("io.github.bonigarcia:webdrivermanager:5.9.2")
+
+    // Tests
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("org.assertj:assertj-core:3.26.3")

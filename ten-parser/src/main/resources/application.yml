@@ -3,6 +3,7 @@ spring:
     name: ten-parser
   main:
     web-application-type: none   # не поднимаем веб-сервер
+    banner-mode: off
 
 sberbank:
   base-url: "https://www.sberbank-ast.ru"
@@ -18,3 +19,12 @@ sberbank:
   read-timeout-seconds: 60
   delay-min-millis: 1500
   delay-max-millis: 3000
+
+rts:
+  base-url: "https://www.rts-tender.ru"
+  search-path: "/poisk/search"
+  ajax-path: "/poisk/search/ajaxwithfullmodel"
+  user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+  delay-min-millis: 2000
+  delay-max-millis: 4000
+  headless: true

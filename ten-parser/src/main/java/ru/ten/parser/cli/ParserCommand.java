@@ -49,6 +49,14 @@ public class ParserCommand implements Callable<Integer> {
     )
     private int pages;
 
+    @Option(
+            names = "--platform",
+            defaultValue = "sberbank",
+            paramLabel = "<platform>",
+            description = "Площадка: sberbank, rts"
+    )
+    private String platform;
+
     public ParserCommand(TenderService tenderService) {
         this.tenderService = tenderService;
     }
@@ -60,12 +68,13 @@ public class ParserCommand implements Callable<Integer> {
             return 2;
         }
 
+        log.info("Платформа: {}", platform);
         log.info("Ключевые слова: {}", keywords);
         log.info("Статусы: {}", statuses);
         log.info("Страниц: {}", pages);
 
         try {
-            tenderService.searchAndPrint(keywords, statuses, pages);
+            tenderService.searchAndPrint(platform, keywords, statuses, pages);
             return 0;
         } catch (Exception e) {
             log.error("Ошибка при выполнении поиска", e);
